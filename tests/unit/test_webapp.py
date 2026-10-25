@@ -82,7 +82,7 @@ class ViewsTestCase(SearxTestCase):  # pylint: disable=too-many-public-methods
         result = self.client.post('/')
         self.assertEqual(result.status_code, 200)
         self.assertIn(
-            b'<div class="title"><h1>SearXNG</h1></div>',
+            b'<div class="title"><h1>Pleochroic Search</h1></div>',
             result.data,
         )
 
@@ -99,7 +99,7 @@ class ViewsTestCase(SearxTestCase):  # pylint: disable=too-many-public-methods
     def test_search_empty_html(self):
         result = self.client.post('/search', data={'q': ''})
         self.assertEqual(result.status_code, 200)
-        self.assertIn(b'<div class="title"><h1>SearXNG</h1></div>', result.data)
+        self.assertIn(b'<div class="title"><h1>Pleochroic Search</h1></div>', result.data)
 
     def test_search_empty_json(self):
         result = self.client.post('/search', data={'q': '', 'format': 'json'})
@@ -158,7 +158,7 @@ class ViewsTestCase(SearxTestCase):  # pylint: disable=too-many-public-methods
     def test_search_rss(self):
         result = self.client.post('/search', data={'q': 'test', 'format': 'rss'})
 
-        self.assertIn(b'<description>Search results for "test" - SearXNG</description>', result.data)
+        self.assertIn(b'<description>Search results for "test" - Pleochroic Search</description>', result.data)
 
         self.assertIn(b'<title>First Test</title>', result.data)
 
@@ -229,7 +229,7 @@ class ViewsTestCase(SearxTestCase):  # pylint: disable=too-many-public-methods
         result = self.client.get('/opensearch.xml')
         self.assertEqual(result.status_code, 200)
         self.assertIn(
-            b'<Description>SearXNG is a metasearch engine that respects your privacy.</Description>', result.data
+            b'<Description>Pleochroic Search is a metasearch engine that respects your privacy.</Description>', result.data
         )
 
     def test_favicon(self):
