@@ -1,0 +1,129 @@
+# Pleochroic Search — deployment settings template
+#
+# This is the PUBLIC half of the configuration: it is committed to the fork
+# and contains no secrets. It is merged with SearXNG's own built-in defaults
+# (searx/settings.yml, via `use_default_settings: true` below) and then, at
+# deploy time, with a PRIVATE overlay file that supplies the residential
+# proxy credentials. See pleochroic/README.md ("Settings layering") for the
+# full explanation and pleochroic/settings.private.example.yml for the shape
+# of the private file.
+#
+# This service is never exposed publicly. It listens on 127.0.0.1 only and
+# is called exclusively by standalone-service running on the same host.
+
+use_default_settings:
+  engines:
+    # Keep only the engines Pleochroic Search actually wants to expose.
+    # Everything else from SearXNG's ~350 built-in engines — including the
+    # whole image/video/music/social-media/torrent surface — is dropped.
+    # This is deny-by-default: a new upstream engine is OFF until someone
+    # adds its name here.
+    keep_only:
+      # general web
+      - google
+      - bing
+      - duckduckgo
+      - brave
+      - mojeek
+      - startpage
+      # code & Q&A
+      - github
+      - stackoverflow
+      - askubuntu
+      - superuser
+      # reference / docs
+      - wikipedia
+      - mdn
+      - mankier
+      - arch linux wiki
+      # research
+      - arxiv
+      # package registries (no Maven Central engine exists upstream yet —
+      # see pleochroic/README.md "Known gaps")
+      - pypi
+      - npm
+      - crates.io
+      - docker hub
+
+general:
+  instance_name: "Pleochroic Search"
+
+search:
+  # JSON is what standalone-service's searxngSearch() engine talks to; html
+  # is kept so a human can open the instance over an SSH/WireGuard tunnel
+  # for debugging.
+  formats:
+    - html
+    - json
+  # Conservative default: the general web engines above can return anything
+  # Google/Bing/etc. themselves would return. This is a light safety net,
+  # not a content filter guarantee; raise/lower per deployment preference.
+  safe_search: 1
+
+server:
+  port: 8888
+  bind_address: "127.0.0.1"
+  # Only standalone-service, on the same box, ever talks to this port — no
+  # public instance, so the rate limiter and its botdetection middleware
+  # stay off. (Verified: searx/limiter.py#initialize() returns immediately
+  # when both server.limiter and server.public_instance are false, and never
+  # touches Valkey — see "No Valkey" in pleochroic/README.md.)
+  limiter: false
+  public_instance: false
+  # Real value is injected via the SEARXNG_SECRET environment variable
+  # (systemd EnvironmentFile), which searx/settings_defaults.py reads
+  # unconditionally and which always wins over whatever is written here —
+  # see pleochroic/README.md "Settings layering". This placeholder is never
+  # used as long as that env var is set.
+  secret_key: "changeme-overridden-by-SEARXNG_SECRET-env-var"
+
+# communication with search engines — all outgoing engine requests must go
+# through the rotating residential proxy; see pleochroic/README.md and
+# pleochroic/settings.private.example.yml. The `proxies` key itself is
+# deliberately NOT set here: it is merged in from the private overlay file
+# at deploy time so the real credentials never touch this repo.
+outgoing:
+  # SearXNG's own default is 3.0s; a rotating residential proxy adds its own
+  # connect/DNS overhead on top of the engine's own latency, so give engines
+  # more room before SearXNG gives up on them.
+  request_timeout: 6.0
+  max_request_timeout: 15.0
+  pool_connections: 100
+  enable_http2: true
+  # Retry through the pool once more before giving up. The exit IP rotates
+  # hourly on the provider's side (not per request), so a retry mostly
+  # absorbs a transient connection reset/timeout rather than actually
+  # changing IP — still worth it for a flaky upstream proxy.
+  retries: 2
+  # Extra seconds of budget for the proxy's own connect/relay time, added on
+  # top of request_timeout — see docs/admin/settings/settings_outgoing.rst.
+  extra_proxy_timeout: 10
+
+engines:
+  # --- general web: enabled, conservative weights ---
+  - name: google
+    disabled: false
+  - name: bing
+    disabled: false
+  - name: duckduckgo
+    disabled: false
+  - name: brave
+    disabled: false
+  - name: mojeek
+    # Upstream ships this `inactive: true` because Mojeek uses a
+    # proof-of-work CAPTCHA that can fail from flaky/low-reputation IPs.
+    # Pleochroic Search re-enables it but with reduced weight, since it is
+    # more likely to come back empty than the others.
+    inactive: false
+    weight: 0.5
+  - name: startpage
+    # Same caveat as Mojeek: upstream disables it by default over its
+    # proof-of-work CAPTCHA. Re-enabled here with reduced weight.
+    inactive: false
+    weight: 0.5
+
+  # --- package registries: disabled upstream by default, enabled here ---
+  - name: npm
+    disabled: false
+  - name: crates.io
+    disabled: false
