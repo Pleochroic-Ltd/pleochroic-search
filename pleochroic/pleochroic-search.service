@@ -1,0 +1,102 @@
+# Pleochroic Search — systemd unit
+#
+# Installed by install.sh to /etc/systemd/system/pleochroic-search.service.
+# Runs SearXNG (this fork) behind Granian (the WSGI server SearXNG's own
+# official container ships — see requirements-server.txt and
+# container/entrypoint.sh upstream), bound to 127.0.0.1 only.
+#
+# Nothing in this unit is public: the service is reachable solely from
+# standalone-service running on the same box, over 127.0.0.1.
+
+[Unit]
+Description=Pleochroic Search (SearXNG fork — internal metasearch JSON API)
+Documentation=https://github.com/searxng/searxng
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pleochroic-search
+Group=pleochroic-search
+WorkingDirectory=/opt/pleochroic-search/release
+
+# Secrets / config
+# -----------------
+# SEARXNG_SECRET lives here, root-owned 0600 — systemd (as root) reads this
+# file before dropping privileges to User=, so it never needs to be
+# group-readable by the service account.
+EnvironmentFile=/etc/pleochroic-search/secrets.env
+
+Environment=PYTHONPATH=/opt/pleochroic-search/release
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=LANG=C.UTF-8
+Environment=LC_ALL=C.UTF-8
+
+# The merged settings.yml (public template + private proxy overlay) is
+# regenerated fresh on every start into a systemd-managed runtime
+# directory — see merge_settings.py and pleochroic/README.md ("Settings
+# layering"). This is what lets `settings.private.yml` be edited and picked
+# up with a plain `systemctl restart`, no reinstall.
+RuntimeDirectory=pleochroic-search
+RuntimeDirectoryMode=0750
+Environment=SEARXNG_SETTINGS_PATH=/run/pleochroic-search/settings.yml
+ExecStartPre=/opt/pleochroic-search/venv/bin/python3 /opt/pleochroic-search/release/pleochroic/merge_settings.py /etc/pleochroic-search/settings.yml /etc/pleochroic-search/settings.private.yml /run/pleochroic-search/settings.yml
+
+# Granian, in WSGI mode, serving searx.webapp:app — same entry point
+# upstream's own container uses.
+Environment=GRANIAN_INTERFACE=wsgi
+Environment=GRANIAN_HOST=127.0.0.1
+Environment=GRANIAN_PORT=8888
+Environment=GRANIAN_PROCESS_NAME=pleochroic-search
+Environment=GRANIAN_WORKERS=2
+Environment=GRANIAN_BLOCKING_THREADS=4
+Environment=GRANIAN_WEBSOCKETS=false
+ExecStart=/opt/pleochroic-search/venv/bin/granian searx.webapp:app
+
+Restart=on-failure
+RestartSec=2
+TimeoutStartSec=30
+TimeoutStopSec=10
+
+# --- hardening ---
+# Only 127.0.0.1 is ever bound, only standalone-service on the same host
+# calls in, and the limiter/botdetection stack is off in settings.yml — so
+# this unit can be locked down hard without touching any legitimate traffic
+# path.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/etc/pleochroic-search
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+# MemoryDenyWriteExecute is deliberately left off: curl_cffi (outgoing
+# requests) loads cffi-based native extensions whose runtime trampoline
+# behaviour wasn't verified against this restriction on the real target
+# (couldn't test the Linux/granian/curl_cffi combination from this
+# machine — see pleochroic/README.md). Safe to try enabling it on the
+# server and watch the journal for SIGSYS crashes before keeping it.
+RemoveIPC=true
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0077
+# Outbound network is required (proxy + whatever DNS it needs); only loopback
+# is needed for inbound.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target
