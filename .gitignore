@@ -27,3 +27,8 @@ searx/version_frozen.py
 .dir-locals.el
 
 .python-version
+
+# Pleochroic Search: real proxy credentials never belong in the repo, only
+# in /etc/pleochroic-search/settings.private.yml on the server. This is a
+# safety net in case someone drops a local copy in here while testing.
+/pleochroic/settings.private.yml
