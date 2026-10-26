@@ -1,50 +1,11 @@
-# Pleochroic Search — PRIVATE settings overlay (EXAMPLE — commit-safe)
-#
-# This file documents the shape of the real, root-owned private overlay
-# that lives on the server at:
-#
-#   /etc/pleochroic-search/settings.private.yml   (root:pleochroic-search, 0640)
-#
-# It is NEVER committed with real values — this checked-in copy only ever
-# holds placeholders. Copy it to the path above and fill in the real proxy
-# credentials by hand (or from your secrets manager); install.sh does not
-# create it for you and will not overwrite it if it already exists.
-#
-# How it's used: search/pleochroic/merge_settings.py deep-merges this file
-# on top of search/pleochroic/settings.yml (the public template) to produce
-# the final /etc/pleochroic-search/settings.yml that SearXNG actually loads
-# (via SEARXNG_SETTINGS_PATH=/etc/pleochroic-search). See
-# pleochroic/README.md ("Settings layering") for the full mechanism and why
-# it's done this way instead of relying on SearXNG's own
-# `use_default_settings`.
-#
-# Only the keys that are actually secret/environment-specific belong here.
-# Everything else (engine selection, timeouts, instance name, ...) lives in
-# the public settings.yml and should NOT be duplicated in this file.
+# Example private overlay: copy to /etc/pleochroic-search/settings.private.yml and fill in the proxy.
 
 outgoing:
   proxies:
-    # All outgoing engine requests (every search engine SearXNG talks to)
-    # must go through the rotating residential proxy — this is the ONLY
-    # egress path engines are allowed to use. One socks5/https endpoint
-    # whose exit IP rotates hourly on the provider's side.
-    #
-    # Format: curl_cffi proxy map, scheme -> list of proxy URLs (SearXNG
-    # round-robins across the list if there's more than one). Use
-    # socks5h:// (not socks5://) so DNS resolution happens on the proxy
-    # side, not from this box.
-    #
-    #   socks5h://USER:PASS@HOST:PORT
-    #   https://USER:PASS@HOST:PORT      (if the provider offers an HTTPS
-    #                                      CONNECT endpoint instead of SOCKS5)
-    #
-    # Replace USER, PASS, HOST, PORT below with the values from the
-    # residential proxy provider. Never commit the real values.
+    # The residential proxy every engine request goes through, one or more URLs per scheme
+    #   socks5h://USER:PASS@HOST:PORT    (socks5h resolves DNS on the proxy side)
+    #   https://USER:PASS@HOST:PORT      (an HTTPS CONNECT endpoint)
     all://:
       - "socks5h://USER:PASS@HOST:PORT"
 
-# server.secret_key is intentionally NOT set here: it travels via the
-# SEARXNG_SECRET environment variable instead (systemd EnvironmentFile at
-# /etc/pleochroic-search/secrets.env), which SearXNG reads natively
-# (searx/settings_defaults.py, environ_name='SEARXNG_SECRET') and which
-# always overrides whatever is in any settings.yml. Put it there, not here.
+# server.secret_key goes in /etc/pleochroic-search/secrets.env as SEARXNG_SECRET.

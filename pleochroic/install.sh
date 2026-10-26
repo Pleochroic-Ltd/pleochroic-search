@@ -1,24 +1,6 @@
 #!/usr/bin/env bash
-# Pleochroic Search — install/update script for Ubuntu 24.04.
-#
-# Idempotent: safe to re-run after a `git pull` to pick up fork updates, or
-# after editing the systemd unit template. It never touches
-# /etc/pleochroic-search/settings.private.yml or secrets.env once they
-# exist — those are the two operator-owned files with real secrets in them.
-#
-# What it does:
-#   1. installs OS packages (python3, venv, pip, rsync)
-#   2. creates the system user/group `pleochroic-search`
-#   3. syncs this checkout into /opt/pleochroic-search/release
-#   4. creates/updates a venv at /opt/pleochroic-search/venv and installs
-#      SearXNG's own requirements + requirements-server.txt (granian)
-#   5. lays out /etc/pleochroic-search (0750) with the public settings
-#      template, and scaffolds settings.private.yml / secrets.env only if
-#      they don't already exist
-#   6. installs the systemd unit and runs `daemon-reload`
-#
-# It does NOT start or enable the service — see the printed summary at the
-# end for the manual steps (fill in the proxy credentials first).
+# Installs or updates Pleochroic Search on Ubuntu 24.04, leaving settings.private.yml and secrets.env alone once
+# they exist.
 #
 # Usage: sudo ./install.sh
 
@@ -30,7 +12,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"   # search/ (the SearXNG checkout root)
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"   # the SearXNG checkout root
 
 PREFIX=/opt/pleochroic-search
 RELEASE_DIR="$PREFIX/release"
@@ -88,13 +70,11 @@ mkdir -p "$CONF_DIR"
 chown root:"$SERVICE_GROUP" "$CONF_DIR"
 chmod 0750 "$CONF_DIR"
 
-# Public template: always synced from the repo, never hand-edited in place.
+# Public template, replaced on every run
 install -o root -g "$SERVICE_GROUP" -m 0640 \
     "$RELEASE_DIR/pleochroic/settings.yml" "$CONF_DIR/settings.yml"
 
-# Private overlay: scaffolded from the example ONLY if missing. Real
-# credentials must be filled in by hand — see settings.private.example.yml
-# and pleochroic/README.md ("Settings layering").
+# Private overlay, scaffolded from the example when missing
 if [ ! -f "$CONF_DIR/settings.private.yml" ]; then
     install -o root -g "$SERVICE_GROUP" -m 0640 \
         "$RELEASE_DIR/pleochroic/settings.private.example.yml" "$CONF_DIR/settings.private.yml"
@@ -103,9 +83,7 @@ else
     log "$CONF_DIR/settings.private.yml already exists, leaving it untouched"
 fi
 
-# SEARXNG_SECRET: generated once if missing, root-only (systemd reads this
-# file as root via EnvironmentFile=, before dropping to the service user —
-# it never needs to be group-readable).
+# SEARXNG_SECRET, generated once and readable by root only
 if [ ! -f "$CONF_DIR/secrets.env" ]; then
     {
         echo "# Pleochroic Search — generated $(date -u +%Y-%m-%dT%H:%M:%SZ)"
