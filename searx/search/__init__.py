@@ -13,6 +13,7 @@ from flask import copy_current_request_context
 
 from searx import logger
 from searx import settings
+from searx import pleochroic_proxy
 import searx.answerers
 import searx.plugins
 from searx.engines import load_engines
@@ -178,6 +179,7 @@ class Search:
         if not self.search_external_bang():
             if not self.search_answerers():
                 self.search_standard()
+                pleochroic_proxy.after_search(self.result_container)
         return self.result_container
 
 

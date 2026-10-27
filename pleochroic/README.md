@@ -28,6 +28,26 @@ The fork changes as little as possible, so that rebasing onto upstream releases 
     every locale's `.po` file, so they stay as upstream wrote them.
   - `searx/favicon.svg`/`.png` and the search-page mark (`searxng-wordmark.min.svg`) are abstract icons and stay as
     they are.
+- **Proxy exit rotation**: `searx/pleochroic_proxy.py`, called once from `Search.search()` in
+  `searx/search/__init__.py`. See "Proxy exit rotation" below.
+
+## Proxy exit rotation
+
+The residential proxy's username carries a session id (`…-sid-<id>-…`) that pins one random residential exit, and
+the provider moves each session to a new exit every hour on its own. An exit can turn slow or get flagged before
+that, and then nearly every engine of a search fails at once.
+
+After each search, `pleochroic_proxy.after_search` counts the engines that sent a request and failed the way a bad
+exit fails: timeouts, `curl_cffi` connection, DNS, proxy and TLS errors, CAPTCHAs, 403s and 429s. A site's own HTTP
+error does not count. When at least two engines, and at least half of those asked, failed that way, it gives every
+proxy URL with a session id its own fresh random one of the same length, drops the old session's clients from the
+cache (closing them five minutes later, once any request on them is surely done), and lifts the suspensions engines
+hold against the old address, so the next search leaves from another exit. It swaps at most once a minute per
+process (granian runs two), so concurrent failing searches do not churn through exits. A proxy URL without a `-sid-`
+part is left alone.
+
+The new id lives only in memory: a restart goes back to the one in `settings.private.yml`, which the provider has
+moved to a new exit within the hour anyway. The id is part of the proxy credential and is never logged.
 
 ## Engine selection
 
@@ -149,8 +169,9 @@ git checkout pleochroic
 git rebase origin/master
 ```
 
-The diff from upstream is a few template lines, one default setting, four test assertions, and the new files under
-`pleochroic/`, so conflicts are rare. `keep_only` matches engine names, so a rebase never enables a new upstream
+The diff from upstream is a few template lines, one default setting, four test assertions, one call in
+`searx/search/__init__.py`, `searx/pleochroic_proxy.py` with its test, and the new files under `pleochroic/`, so
+conflicts are rare. `keep_only` matches engine names, so a rebase never enables a new upstream
 engine on its own.
 
 ## Running locally
